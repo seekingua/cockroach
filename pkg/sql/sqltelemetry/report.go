@@ -32,8 +32,19 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 	// In any case, record the counters.
 	telemetry.RecordError(err)
 
-	// Now check for crash reporting.
-	if code := pgerror.GetPGCode(err); code == pgcode.Internal {
+	code := pgerror.GetPGCode(err)
+	switch code {
+	case pgcode.Uncategorized:
+		// For compatibility with 19.1 telemetry, keep track of the number
+		// of occurrences of errors without code in telemetry. Over time,
+		// we'll want this count to go down (i.e. more errors becoming
+		// qualified with a code).
+		//
+		// TODO(knz): figure out if this telemetry is still useful.
+		telemetry.Inc(UncategorizedErrorCounter)
+
+	case pgcode.Internal:
+		// This is an assertion failure / crash.
 		// We want to log the internal error regardless of whether a
 		// report is sent to sentry below.
 		log.Errorf(ctx, "encountered internal error:\n%+v", err)
