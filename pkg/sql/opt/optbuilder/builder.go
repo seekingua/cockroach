@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -137,12 +138,23 @@ func (b *Builder) Build() (err error) {
 			// not manipulate locks.
 			switch e := r.(type) {
 			case builderError:
-				err = e.error
-			case *pgerror.Error:
+				// It's been handled locally. No questions asked.
 				err = e
-			default:
-				panic(r)
+				return
+			case error:
+				// Not all errors-thrown-as-panic can be safely reported as
+				// recoverable errors. We only recognize a few of "our" types
+				// here.
+				if code := pgerror.GetPGCode(e); code != pgcode.Uncategorized {
+					// This covers all SQL errors, those produced by a few utility packages,
+					// and assertion errors.
+					err = e
+					return
+				}
+				// Other errors can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
 			}
+			panic(r)
 		}
 	}()
 
@@ -163,11 +175,17 @@ func (b *Builder) Build() (err error) {
 
 // builderError is used to wrap errors returned by various external APIs that
 // occur during the build process. It exists for us to be able to panic on these
-// errors and then catch them inside Builder.Build even if they are not
-// pgerror.Error.
+// errors and then catch them inside Builder.Build.
 type builderError struct {
-	error
+	error error
 }
+
+// builderError are errors.
+func (b builderError) Error() string { return b.error.Error() }
+
+// Cause implements the causer interface. This is used so that builderErrors
+// can be peeked through by the common error facilities.
+func (b builderError) Cause() error { return b.error }
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
