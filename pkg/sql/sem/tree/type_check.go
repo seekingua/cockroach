@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/text/language"
 )
@@ -346,9 +348,9 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedBinaryOpErrFmt, sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
-		return nil,
-			pgerror.Newf(pgerror.CodeAmbiguousFunctionError,
-				ambiguousBinaryOpErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
+		err := pgerror.Newf(pgcode.AmbiguousFunction, ambiguousBinaryOpErrFmt, sig)
+		err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
+		return nil, err
 	}
 
 	binOp := fns[0].(*BinOp)
@@ -1216,8 +1218,9 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedUnaryOpErrFmt, sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
-		return nil, pgerror.Newf(pgerror.CodeAmbiguousFunctionError,
-			ambiguousUnaryOpErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
+		err := pgerror.Newf(pgcode.AmbiguousFunction, ambiguousUnaryOpErrFmt, sig)
+		err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
+		return nil, err
 	}
 
 	unaryOp := fns[0].(*UnaryOp)
@@ -1653,9 +1656,9 @@ func typeCheckComparisonOpWithSubOperator(
 	return leftTyped, rightTyped, fn, false, nil
 }
 
-func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) *pgerror.Error {
+func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) error {
 	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
-	return pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+	return pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 }
 
 // typeCheckSubqueryWithIn checks the case where the right side of an IN
@@ -1812,9 +1815,9 @@ func typeCheckComparisonOp(
 				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
 		fnsStr := formatCandidates(op.String(), fns)
-		return nil, nil, nil, false,
-			pgerror.Newf(pgerror.CodeAmbiguousFunctionError,
-				ambiguousCompErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
+		err := pgerror.Newf(pgcode.AmbiguousFunction, ambiguousCompErrFmt, sig)
+		err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
+		return nil, nil, nil, false, err
 	}
 
 	return leftExpr, rightExpr, fns[0].(*CmpOp), false, nil
