@@ -18,6 +18,7 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -252,6 +253,7 @@ func (s *raftScheduler) enqueue1Locked(addState raftScheduleState, id roachpb.Ra
 		queued++
 		s.mu.queue.PushBack(id)
 	}
+	log.Infof(context.TODO(), "raft===> r:%d sta_pri:%d sta_now:%d", id, prevState, newState)
 	s.mu.state[id] = newState
 	return queued
 }

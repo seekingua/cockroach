@@ -49,7 +49,7 @@ import (
 
 // maxSyncDuration is set to a conservative value since this is a new mechanism.
 // In practice, even a fraction of that would indicate a problem.
-var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 30*time.Second)
+var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 300*time.Second)
 
 const fatalErrorPostamble = `
 

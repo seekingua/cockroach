@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"sort"
 	"sync/atomic"
@@ -335,9 +336,11 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 							stats = t.getStats(batch.Requests[0].FromReplica.NodeID)
 						}
 
+						debugBatchID := rand.Uint32()
 						for i := range batch.Requests {
 							req := &batch.Requests[i]
 							atomic.AddInt64(&stats.serverRecv, 1)
+							log.Infof(ctx, "recv===> batchid:%d from n:%d s:%d r:%d, type:%s", debugBatchID, req.FromReplica.NodeID, req.FromReplica.StoreID, req.FromReplica.ReplicaID, req.Message.Type)
 							if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
 								atomic.AddInt64(&stats.serverSent, 1)
 								if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {

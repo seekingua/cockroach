@@ -1892,6 +1892,7 @@ func nextBatchGroup(pending []*rocksDBBatch) (prefix []*rocksDBBatch, suffix []*
 	return pending, pending[len(pending):]
 }
 
+// 将rocksDBBatch中builder里面存储的repr写入rocksdb
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
