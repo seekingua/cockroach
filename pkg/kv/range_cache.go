@@ -275,17 +275,20 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 	defer doneWg()
 
+	log.Infof(ctx, "rcache===>lid:%d, key:%s, from cache", ctx.Value("lid"), key)
 	rdc.rangeCache.RLock()
 	if desc, _, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCache.RUnlock()
 		return nil, nil, err
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
+		log.Infof(ctx, "rcache===>lid:%d, key:%s, cache hit, range:%d", ctx.Value("lid"), key, desc.RangeID)
 		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) error {
 			return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
 		})
 		return desc, returnToken, nil
 	}
+	log.Infof(ctx, "rcache===>lid:%d, key:%s, cache miss", ctx.Value("lid"), key)
 
 	if log.V(2) {
 		log.Infof(ctx, "lookup range descriptor: key=%s", key)
@@ -296,6 +299,8 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		ctx := ctx // disable shadows linter
 		ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
 		defer tracing.FinishSpan(reqSpan)
+
+		log.Infof(ctx, "rcache===>lid:%d, key:%s, from db", ctx.Value("lid"), key)
 
 		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
 		if err != nil {
@@ -340,8 +345,14 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		// the prefetched descriptors first to avoid any unintended overwriting. We then
 		// only insert the first desired descriptor, since any other descriptor in rs would
 		// overwrite rs[0]. Instead, these are handled with the evictToken.
+		for _, pr := range preRs {
+			log.Infof(ctx, "rcache===>lid:%d, key:%s, pre cache range:%d", ctx.Value("lid"), key, pr.RangeID)
+		}
 		if err := rdc.insertRangeDescriptorsLocked(ctx, preRs...); err != nil {
 			log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
+		}
+		for _, pr := range rs[:1] {
+			log.Infof(ctx, "rcache===>lid:%d, key:%s, cache range:%d", ctx.Value("lid"), key, pr.RangeID)
 		}
 		if err := rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...); err != nil {
 			return nil, err
@@ -417,6 +428,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	// range. Return the first range, which is always gossiped and not
 	// queried from the datastore.
 	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		log.Infof(ctx, "rcache===>lid:%d, key:%s, got it, target is first range, so get range:1", ctx.Value("lid"), key)
 		desc, err := rdc.db.FirstRange()
 		if err != nil {
 			return nil, nil, err
@@ -598,6 +610,18 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 		if log.V(2) {
 			log.Infof(ctx, "adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
+		log.Infof(ctx, "rcache===>range cache len:%d, rangeID:%d", rdc.rangeCache.cache.Len(), &rs[i].RangeID)
+
+		//_ = rdc.rangeCache.cache.DoEntry(
+		//	func(e *cache.Entry) bool {
+		//		if e.Value != nil {
+		//			rd := e.Value.(roachpb.RangeDescriptor)
+		//			log.Infof(ctx, "rcache===> range:%d[%s,%s]", rd.RangeID, rd.StartKey, rd.EndKey)
+		//		}
+		//		return true
+		//	},
+		//)
+
 		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	return nil

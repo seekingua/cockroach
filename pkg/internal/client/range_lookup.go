@@ -158,6 +158,7 @@ import (
 // likely to be desired by their current workload. The prefetchReverse flag
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
+// TODO mark. how range route data
 func RangeLookup(
 	ctx context.Context,
 	sender Sender,
@@ -199,6 +200,7 @@ func RangeLookup(
 		}
 
 		descs, intentDescs, err := lookupRangeFwdScan(ctx, sender, rkey, rc, prefetchNum, prefetchReverse)
+
 		if err != nil {
 			return nil, nil, err
 		}
@@ -243,6 +245,9 @@ func RangeLookup(
 			}
 		}
 		if len(matchingRanges) > 0 {
+
+			log.Infof(ctx, "rcache===>lid:%d, key:%s, got response, match range len:%d, prefetch range len:%d", ctx.Value("lid"), rkey, len(matchingRanges), len(prefetchedRanges))
+
 			return matchingRanges, prefetchedRanges, nil
 		}
 

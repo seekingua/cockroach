@@ -62,6 +62,7 @@ type runnerResult struct {
 	err    error
 }
 
+// 发送flow到remote node
 func (req runnerRequest) run() {
 	defer distsqlplan.ReleaseSetupFlowRequest(req.flowReq)
 

@@ -17,6 +17,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync/atomic"
 	"unsafe"
 
@@ -453,9 +454,17 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+
+	//	set batch id if first call this method
+	if ctx.Value("lid") == nil {
+		ctx = context.WithValue(ctx, "lid", rand.Uint32())
+	}
+	log.Infof(ctx, "rcache===>lid:%d, key:%s, lookup range", ctx.Value("lid"), descKey)
+
 	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
+
 	if err != nil {
 		return nil, returnToken, err
 	}
@@ -706,6 +715,12 @@ func (ds *DistSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
+		//	set batch id if first call this method
+		if ctx.Value("lid") == nil {
+			ctx = context.WithValue(ctx, "lid", rand.Uint32())
+		}
+		log.Infof(ctx, "rcache===>lid:%d, rspan:[%s , %s)", ctx.Value("lid"), rs.Key, rs.EndKey)
+
 		var rpl *roachpb.BatchResponse
 		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
 
@@ -780,13 +795,21 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection
+
+	//	set batch id if first call this method
+	if ctx.Value("lid") == nil {
+		ctx = context.WithValue(ctx, "lid", rand.Uint32())
+	}
+
 	var seekKey roachpb.RKey
 	if !ba.IsReverse() {
 		scanDir = Ascending
 		seekKey = rs.Key
+		log.Infof(ctx, "rcache===>lid:%d, key:%s, seek range using start key", ctx.Value("lid"), seekKey)
 	} else {
 		scanDir = Descending
 		seekKey = rs.EndKey
+		log.Infof(ctx, "rcache===>lid:%d, key:%s, seek range using end key", ctx.Value("lid"), seekKey)
 	}
 	ri := NewRangeIterator(ds)
 	ri.Seek(ctx, seekKey, scanDir)
@@ -1137,6 +1160,8 @@ func (ds *DistSender) sendPartialBatch(
 				continue
 			}
 		}
+
+		log.Infof(ctx, "rcache===>lid:%d, send batch request to range:%d", ctx.Value("lid"), desc.RangeID)
 
 		reply, pErr = ds.sendSingleRange(ctx, ba, desc)
 

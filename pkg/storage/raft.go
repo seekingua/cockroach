@@ -66,7 +66,7 @@ func (r *raftLogger) Info(v ...interface{}) {
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
-	if log.V(2) {
+	if log.V(0) {
 		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }

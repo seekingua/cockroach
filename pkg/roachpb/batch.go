@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -490,6 +492,31 @@ func (ba *BatchRequest) Methods() []Method {
 // sending a whole transaction in a single Batch when addressing a single
 // range.
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
+
+	bid := rand.Uint32()
+	fmt.Printf("split===> mask:%s \n", convertToBin(isWrite|isAdmin|isReverse))
+	start := 0
+	sbid := rand.Uint32()
+	gf := 0
+	for i := 0; i < len(ba.Requests); i++ {
+		gmask := convertToBin(gf & (isWrite | isAdmin | isReverse))
+		rmask := convertToBin(ba.Requests[i].GetInner().flags() & (isWrite | isAdmin | isReverse))
+		if i == 0 || gmask != rmask || (gf&isAlone) != 0 || (ba.Requests[i].GetInner().flags()&isAlone) != 0 || (canSplitET && ba.Requests[i].GetInner().Method() == EndTransaction) {
+			sbid = rand.Uint32()
+			start = i
+			gf = ba.Requests[i].GetInner().flags()
+		} else {
+			for j := start; j <= i; j++ {
+				gf = gf | ba.Requests[i].GetInner().flags()
+			}
+		}
+		fmt.Printf("split===> bid:%d sbid:%d method:%s gmask:%s rmask:%s eq:%t \n", bid, sbid, ba.Requests[i].GetInner().Method(), gmask, rmask, gmask == rmask)
+	}
+
+	//for i, r := range ba.Requests {
+	//	fmt.Printf("split===> bid:%d idx:%d %s %s \n", bid, i, r.GetInner().Method(), convertToBin(r.GetInner().flags()))
+	//}
+
 	compatible := func(exFlags, newFlags int) bool {
 		// isAlone requests are never compatible.
 		if (exFlags&isAlone) != 0 || (newFlags&isAlone) != 0 {
@@ -562,7 +589,28 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		parts = append(parts, part)
 		ba.Requests = ba.Requests[len(part):]
 	}
+
+	for _, p := range parts {
+		fmt.Printf("%d \n", len(p))
+	}
+
 	return parts
+}
+
+func convertToBin(num int) string {
+	s := ""
+	if num == 0 {
+		return "0"
+	}
+	for ; num > 0; num /= 2 {
+		lsb := num % 2
+		s = strconv.Itoa(lsb) + s
+	}
+
+	for i := len(s); i <= 32; i++ {
+		s = "0" + s
+	}
+	return s
 }
 
 // String gives a brief summary of the contained requests and keys in the batch.
